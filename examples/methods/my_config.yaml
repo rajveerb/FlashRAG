@@ -8,7 +8,7 @@ model2path:
   llama2-7B: "meta-llama/Llama-2-7b-hf"
   llama2-13B: "meta-llama/Llama-2-13b-hf"
   llama2-13B-chat: "meta-llama/Llama-2-13b-chat-hf"
-  llama3-8B-instruct: "meta-llama/Meta-Llama-3-8B-Instruct"
+  llama3-8B-instruct: "meta-llama/Meta-Llama-3.1-8B-Instruct"
 
 # Pooling methods for each embedding model
 model2pooling:
@@ -20,18 +20,18 @@ model2pooling:
 
 # Indexes path for retrieval models
 method2index:
-  e5: ~
+  e5: "indexes/e5_Flat.index"
   bm25: ~
   contriever: ~
 
 # ------------------------------------------------Environment Settings------------------------------------------------#
 # Directory paths for data and outputs
-data_dir: "dataset/"
-save_dir: "output/"
+data_dir: "examples/methods/dataset/"
+save_dir: "examples/methods/output/"
 
 gpu_id: "0,1,2,3"
-dataset_name: "nq" # name of the dataset in data_dir
-split: [ "test" ]  # dataset split to load (e.g. train,dev,test)
+dataset_name: "2wikidata" # name of the dataset in data_dir
+split: [ "dev" ]  # dataset split to load (e.g. train,dev,test)
 
 # Sampling configurations for testing
 test_sample_num: ~  # number of samples to test (only work in dev/test split), if None, test all samples
@@ -49,7 +49,7 @@ save_note: 'experiment'
 retrieval_method: "e5"  # name or path of the retrieval model. 
 index_path: ~ # set automatically if not provided. 
 faiss_gpu: False # whether use gpu to hold index
-corpus_path: ~  # path to corpus in '.jsonl' format that store the documents
+corpus_path: "indexes/wiki18_100w.jsonl"  # path to corpus in '.jsonl' format that store the documents
 
 instruction: ~ # instruction for retrieval model
 retrieval_topk: 5 # number of retrieved documents

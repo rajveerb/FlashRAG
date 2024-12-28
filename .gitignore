@@ -6,3 +6,6 @@ build/
 dist/*
 upload_pypi.sh
 tests/*
+corpus/
+indexes/
+examples/methods/dataset/

@@ -8,17 +8,20 @@ from flashrag.utils import get_retriever, get_generator, selfask_pred_parse, irc
 from flashrag.pipeline import BasicPipeline
 from flashrag.dataset import get_batch_dataset, merge_batch_dataset
 from flashrag.prompt import PromptTemplate
+from flashrag.retriever import BaseRetriever
+from flashrag.generator import BaseGenerator
 
 
 class IterativePipeline(BasicPipeline):
     def __init__(self, config, prompt_template=None, iter_num=3):
         super().__init__(config, prompt_template)
         self.iter_num = iter_num
-        self.generator = get_generator(config)
-        self.retriever = get_retriever(config)
+        self.generator: BaseGenerator = get_generator(config)
+        self.retriever: BaseRetriever = get_retriever(config)
         
 
     def run(self, dataset, do_eval=True, pred_process_fun=None):
+        import json
         questions = dataset.question
         # run in batch
         past_generation_result = []  # list of N items
@@ -29,9 +32,15 @@ class IterativePipeline(BasicPipeline):
                 assert len(questions) == len(past_generation_result)
                 input_query = [f"{q} {r}" for q, r in zip(questions, past_generation_result)]
 
+            # input_query = input_query[:2]  # limit to 10 for now
+
             # generation-augmented retrieval
-            retrieval_results = self.retriever.batch_search(input_query)
+            retrieval_results, retrieval_times_per_batch = self.retriever.batch_search(input_query)
             dataset.update_output(f"retrieval_result_iter_{iter_idx}", retrieval_results)
+
+            # log retrieval_times_per_batch
+
+            open(f"profile_logs/retrieval_times_per_batch_iter_{iter_idx}.txt", "a").write(json.dumps(retrieval_times_per_batch))
 
             # retrieval-augmented generation
             # input_prompts = self.build_prompt(questions, retrieval_results)
@@ -41,8 +50,39 @@ class IterativePipeline(BasicPipeline):
             ]
 
             dataset.update_output(f"prompt_iter_{iter_idx}", input_prompts)
-            past_generation_result = self.generator.generate(input_prompts)
+            past_generation_result = self.generator.generate(input_prompts, return_raw_output=True)
+
+            stored_output = []
+            for output in past_generation_result:
+                log_output = {
+                    'request_id' : output.request_id,
+                    'prediction' : output.outputs[0].text,
+                    'prompt' : output.prompt,
+                    'metrics' : {
+                        'arrival_time' : output.metrics.arrival_time,
+                        'last_token_time' : output.metrics.last_token_time,
+                        'first_scheduled_time' : output.metrics.first_scheduled_time,
+                        'first_token_time' : output.metrics.first_token_time,
+                        'time_in_queue' : output.metrics.time_in_queue,
+                        'finished_time' : output.metrics.finished_time,
+                        'scheduler_time' : output.metrics.scheduler_time,
+                    }
+                } 
+                stored_output.append(log_output)
+
+            # log past_generation_result
+            open(f"profile_logs/past_generation_result_iter_{iter_idx}.txt", "a").write(json.dumps(stored_output))
+
+            past_generation_result = [output.outputs[0].text for output in past_generation_result]
             dataset.update_output(f"pred_iter_{iter_idx}", past_generation_result)
+
+            # # print input questions, retrieval results, and generated results
+            # print(f"iter {iter_idx}:")
+            # for q, r, p in zip(input_prompts, retrieval_results, past_generation_result):
+            #     print(f"Q: {q}")
+            #     print(f"R: {r}")
+            #     print(f"P: {p}")
+            #     print("")
 
         # use last retrieval result for evaluation
         dataset.update_output("retrieval_result", retrieval_results)

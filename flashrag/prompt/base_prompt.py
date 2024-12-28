@@ -1,4 +1,4 @@
-from transformers import AutoTokenizer, AutoConfig
+from transformers import AutoTokenizer, AutoConfig, PreTrainedTokenizerBase
 import tiktoken
 import warnings
 
@@ -33,7 +33,7 @@ class PromptTemplate:
                 print("Error: ", e)
                 warnings.warn("This model is not supported by tiktoken. Use gpt-3.5-turbo instead.")
                 self.tokenizer = tiktoken.encoding_for_model('gpt-3.5-turbo')
-
+        print(f"Tokenizer: {self.tokenizer}")
         if len(system_prompt) == 0 and len(user_prompt) == 0:
             system_prompt = self.base_system_prompt
             user_prompt = self.base_user_prompt
@@ -130,7 +130,12 @@ class PromptTemplate:
             if user_prompt != "":
                 input.append({"role": "user", "content": user_prompt})
             if not self.is_openai:
-                input = self.tokenizer.apply_chat_template(input, tokenize=False, add_generation_prompt=True)
+                if self.tokenizer is None:
+                    tokenizer = AutoTokenizer.from_pretrained(self.generator_path, trust_remote_code=True)
+                    input = tokenizer.apply_chat_template(input, tokenize=False, add_generation_prompt=True)
+                else:
+                    input = self.tokenizer.apply_chat_template(input, tokenize=False, add_generation_prompt=True)
+            
         else:
             input = "\n\n".join([prompt for prompt in [system_prompt, user_prompt] if prompt != ""])
 

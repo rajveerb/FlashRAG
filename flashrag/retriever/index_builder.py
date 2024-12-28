@@ -211,10 +211,10 @@ class Index_Builder:
         return all_embeddings
 
     def encode_all(self):
-        if self.gpu_num > 1:
-            print("Use multi gpu!")
-            self.encoder = torch.nn.DataParallel(self.encoder)
-            self.batch_size = self.batch_size * self.gpu_num
+        # if self.gpu_num > 1:
+        #     print("Use multi gpu!")
+        #     self.encoder = torch.nn.DataParallel(self.encoder)
+        #     self.batch_size = self.batch_size * self.gpu_num
 
         all_embeddings = []
         for start_idx in tqdm(range(0, len(self.corpus), self.batch_size), desc="Inference Embeddings:"):

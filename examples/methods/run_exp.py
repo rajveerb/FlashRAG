@@ -420,7 +420,7 @@ def iterretgen(args):
         "dataset_name": args.dataset_name,
     }
     # preparation
-    config = Config("my_config.yaml", config_dict)
+    config = Config(args.config_path, config_dict)
     all_split = get_dataset(config)
     test_data = all_split[args.split]
 
@@ -584,6 +584,7 @@ if __name__ == "__main__":
     parser.add_argument("--split", type=str)
     parser.add_argument("--dataset_name", type=str)
     parser.add_argument("--gpu_id", type=str)
+    parser.add_argument("--config_path", type=str)
 
     
     func_dict = {

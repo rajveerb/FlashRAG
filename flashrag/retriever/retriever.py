@@ -20,7 +20,7 @@ def cache_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query_list, num=None, return_score=False):
+    def wrapper(self, query_list, num=None, return_score=False, time_per_batch=True):
         if num is None:
             num = self.topk
         if self.use_cache:
@@ -63,7 +63,7 @@ def cache_manager(func):
             )
 
         else:
-            results, scores = func(self, query_list, num, True)
+            results, scores, time_per_batch_list = func(self, query_list, num, True)
 
         if self.save_cache:
             # merge result and score
@@ -80,8 +80,12 @@ def cache_manager(func):
                 self.cache[query] = doc_items
 
         if return_score:
+            if time_per_batch:
+                return results, scores, time_per_batch_list
             return results, scores
         else:
+            if time_per_batch:
+                return results, time_per_batch_list
             return results
 
     return wrapper
@@ -93,16 +97,20 @@ def rerank_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query_list, num=None, return_score=False):
-        results, scores = func(self, query_list, num, True)
+    def wrapper(self, query_list, num=None, return_score=False, time_per_batch=True):
+        results, scores, time_per_batch_list = func(self, query_list, num, True)
         if self.use_reranker:
             results, scores = self.reranker.rerank(query_list, results)
             if "batch" not in func.__name__:
                 results = results[0]
                 scores = scores[0]
         if return_score:
+            if time_per_batch:
+                return results, scores, time_per_batch_list
             return results, scores
         else:
+            if time_per_batch:
+                return results, time_per_batch_list
             return results
 
     return wrapper
@@ -328,7 +336,7 @@ class DenseRetriever(BaseRetriever):
         else:
             return results
 
-    def _batch_search(self, query_list: List[str], num: int = None, return_score=False):
+    def _batch_search(self, query_list: List[str], num: int = None, return_score=False, time_per_batch=True):
         if isinstance(query_list, str):
             query_list = [query_list]
         if num is None:
@@ -338,8 +346,11 @@ class DenseRetriever(BaseRetriever):
 
         results = []
         scores = []
+        time_per_batch_list = []
+        import time
 
         for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: "):
+            start_time = time.time()
             query_batch = query_list[start_idx : start_idx + batch_size]
             batch_emb = self.encoder.encode(query_batch)
             batch_scores, batch_idxs = self.index.search(batch_emb, k=num)
@@ -349,11 +360,18 @@ class DenseRetriever(BaseRetriever):
             flat_idxs = sum(batch_idxs, [])
             batch_results = load_docs(self.corpus, flat_idxs)
             batch_results = [batch_results[i * num : (i + 1) * num] for i in range(len(batch_idxs))]
+            duration = time.time() - start_time
+
+            time_per_batch_list.append({start_idx : (start_time, duration)})
 
             scores.extend(batch_scores)
             results.extend(batch_results)
 
         if return_score:
+            if time_per_batch:
+                return results, scores, time_per_batch_list
             return results, scores
         else:
+            if time_per_batch:
+                return results, time_per_batch_list
             return results

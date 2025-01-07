@@ -1,4 +1,4 @@
-# python scripts/all_requests_verifier.py --prompt_file_dir profile_logs --prompt_file_prefix past_generation_result_iter --config_path examples/methods/my_config.yaml
+# python scripts/all_requests_verifier.py --prompt_file_dir profile_logs --prompt_file_prefix past_generation_result_iter --config_path examples/methods/my_config.yaml --output_dir profile_logs/IterativePipeline/all_requests/
 # This is to verify what the cdf of the prefill and decode latency looks like if requests are sent all at once
 import argparse, json, os
 from vllm import LLM
@@ -17,7 +17,13 @@ def main():
     parser.add_argument('--prompt_file_dir', type=str, required=True, help='Path to directory containing prompts.')
     # config args
     parser.add_argument('--config_path', type=str, required=True, help='Path to config')
+    # output args
+    parser.add_argument('--output_dir', type=str, default='profile_logs/IterativePipeline/all_requests/', help='Path to output directory.')
     args = parser.parse_args()
+
+    # make output directory if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+
     # config = Config("examples/methods/my_config.yaml",)
     config = Config(args.config_path,)
     print(config)
@@ -60,7 +66,7 @@ def main():
                 })
 
         # log past_generation_result
-        open(f"profile_logs/all_requests_generation_result_iter_{iter_idx}.txt", "a").write(json.dumps(stored_output))
+        open(os.path.join(args.output_dir,f"generation_result_iter_{iter_idx}.txt"), "w").write(json.dumps(stored_output))
 
 if __name__ == '__main__':
     main()

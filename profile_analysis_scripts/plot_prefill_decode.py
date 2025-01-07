@@ -1,6 +1,19 @@
-# python profile_analysis_scripts/plot_prefill_decode.py --input_dir profile_logs --prefix decode_latency_verifier_ --output_figs_dir profile_analysis_scripts/figs --output_stats_dir profile_analysis_scripts/stats --output_prefix individual_requests
-# python profile_analysis_scripts/plot_prefill_decode.py --input_dir profile_logs --prefix past_generation_result_iter_ --output_figs_dir profile_analysis_scripts/figs --output_stats_dir profile_analysis_scripts/stats
-
+# python profile_analysis_scripts/plot_prefill_decode.py\
+#  --input_dir profile_logs\
+#  --prefix individual_requests_verifier_\
+#  --output_figs_dir profile_analysis_scripts/figs/IterativePipeline/individual_requests\
+#  --output_stats_dir profile_analysis_scripts/stats/IterativePipeline/individual_requests\
+#  --output_prefix individual_requests
+# python profile_analysis_scripts/plot_prefill_decode.py\
+#  --input_dir profile_logs\
+#  --prefix past_generation_result_iter_\
+#  --output_figs_dir profile_analysis_scripts/figs\
+#  --output_stats_dir profile_analysis_scripts/stats
+# python profile_analysis_scripts/plot_prefill_decode.py\
+#  --input_dir profile_logs\
+#  --prefix all_requests_generation_result_iter_\
+#  --output_figs_dir profile_analysis_scripts/figs/IterativePipeline/all_requests\
+#  --output_stats_dir profile_analysis_scripts/stats/IterativePipeline/all_requests
 import os
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -26,6 +39,10 @@ if args.output_prefix:
     output_prefix = args.output_prefix+'_'
 else:
     output_prefix = ''
+
+# make output directories if they don't exist
+os.makedirs(args.output_figs_dir, exist_ok=True)
+os.makedirs(args.output_stats_dir, exist_ok=True)
 
 # read all log files in the input directory
 log_files = os.listdir(args.input_dir)
@@ -60,8 +77,7 @@ for iter_num, metrics in metric_data.items():
     iter_data_dict = {'prefill_time (ms)': [], 'decode_time (s)': [], 'request_e2e_time (s)': []}
     for data in metrics:
         prefill_time = (data['first_token_time'] - data['first_scheduled_time']) * 1000
-        # decode_time = (data['first_token_time'] - data['last_token_time'])
-        decode_time = (data['finished_time'] - data['first_token_time'])
+        decode_time = (data['last_token_time'] - data['first_token_time'])
         request_e2e_time = (data['finished_time'] - data['arrival_time'])
         iter_data_dict['prefill_time (ms)'].append(prefill_time)
         iter_data_dict['decode_time (s)'].append(decode_time)
@@ -74,45 +90,54 @@ for iter_num, metrics in metric_data.items():
 
     # save the stats in a csv file per iter_num
     iter_df.describe().to_csv(os.path.join(args.output_stats_dir, output_csv_file))
+
+    # histogram path
+    histogram_dir = os.path.join(args.output_figs_dir, 'histograms')
+
+    # make output directories if they don't exist
+    os.makedirs(histogram_dir, exist_ok=True)
     
     # plot histogram of prefill time, decode time and request e2e time and save in output directory per iter_num
     plt.hist(iter_df['prefill_time (ms)'], bins=1000)
     plt.xlabel('Prefill Time (ms)')
     plt.ylabel('Frequency')
     plt.title(f'Prefill Time Histogram - Iter {iter_num}')
-    plt.savefig(os.path.join(args.output_figs_dir, f'{output_prefix}prefill_time_histogram_iter_{iter_num}.png'))
+    plt.savefig(os.path.join(histogram_dir, f'{output_prefix}prefill_time_histogram_iter_{iter_num}.png'))
     plt.close()
     
     plt.hist(iter_df['decode_time (s)'], bins=100)
     plt.xlabel('Decode Time (s)')
     plt.ylabel('Frequency')
     plt.title(f'Decode Time Histogram - Iter {iter_num}')
-    plt.savefig(os.path.join(args.output_figs_dir, f'{output_prefix}decode_time_histogram_iter_{iter_num}.png'))
+    plt.savefig(os.path.join(histogram_dir, f'{output_prefix}decode_time_histogram_iter_{iter_num}.png'))
     plt.close()
     
     plt.hist(iter_df['request_e2e_time (s)'], bins=100)
     plt.xlabel('Request E2E Time (s)')
     plt.ylabel('Frequency')
     plt.title(f'Request E2E Time Histogram - Iter {iter_num}')
-    plt.savefig(os.path.join(args.output_figs_dir, f'{output_prefix}request_e2e_time_histogram_iter_{iter_num}.png'))
+    plt.savefig(os.path.join(histogram_dir, f'{output_prefix}request_e2e_time_histogram_iter_{iter_num}.png'))
     plt.close()
+
+    cdf_dir = os.path.join(args.output_figs_dir, 'cdf')
+    os.makedirs(cdf_dir, exist_ok=True)
     
     # plot cdf of prefill time, decode time and request e2e time and save in output directory per iter_num
     plt.hist(iter_df['prefill_time (ms)'], bins=100, cumulative=True, density=True)
     plt.xlabel('Prefill Time (ms)')
     plt.title(f'Prefill Time CDF - Iter {iter_num}')
-    plt.savefig(os.path.join(args.output_figs_dir, f'{output_prefix}prefill_time_cdf_iter_{iter_num}.png'))
+    plt.savefig(os.path.join(cdf_dir, f'{output_prefix}prefill_time_cdf_iter_{iter_num}.png'))
     plt.close()
     
     plt.hist(iter_df['decode_time (s)'], bins=100, cumulative=True, density=True)
     plt.xlabel('Decode Time (s)')
     plt.title(f'Decode Time CDF - Iter {iter_num}')
-    plt.savefig(os.path.join(args.output_figs_dir, f'{output_prefix}decode_time_cdf_iter_{iter_num}.png'))
+    plt.savefig(os.path.join(cdf_dir, f'{output_prefix}decode_time_cdf_iter_{iter_num}.png'))
     plt.close()
     
     plt.hist(iter_df['request_e2e_time (s)'], bins=100, cumulative=True, density=True)
     plt.xlabel('Request E2E Time (s)')
     plt.title(f'Request E2E Time CDF - Iter {iter_num}')
-    plt.savefig(os.path.join(args.output_figs_dir, f'{output_prefix}request_e2e_time_cdf_iter_{iter_num}.png'))
+    plt.savefig(os.path.join(cdf_dir, f'{output_prefix}request_e2e_time_cdf_iter_{iter_num}.png'))
     plt.close()
 

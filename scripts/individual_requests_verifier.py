@@ -1,4 +1,4 @@
-# python scripts/decode_latency_verifier.py --prompt_file profile_logs/tmp_past_generation_result_iter_0.txt
+# python scripts/individual_requests_verifier.py --prompt_file profile_logs/tmp_past_generation_result_iter_0.txt
 # This is to verify what the cdf of the decode latency looks like if requests are sent one by one
 import argparse
 import json
@@ -49,7 +49,7 @@ def main():
                 })
 
         # log past_generation_result
-        open(f"profile_logs/decode_latency_verifier_{iter_idx}.txt", "a").write(json.dumps(stored_output))
+        open(f"profile_logs/individual_requests_verifier_{iter_idx}.txt", "a").write(json.dumps(stored_output))
 
 if __name__ == '__main__':
     main()

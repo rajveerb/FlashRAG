@@ -42,5 +42,7 @@ python scripts/get_no_vectors.py \
     --split 'dev' \
     --dataset_name '2wikidata' \
     --gpu_id '0,1' \
-    --config_path examples/methods/my_config.yaml
+    --save_metrics \
+    --metrics_log_dir ./profile_logs/IterativePipeline \ 
+    --config_path ./examples/methods/my_config.yaml
 ```

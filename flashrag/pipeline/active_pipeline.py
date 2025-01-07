@@ -1,7 +1,7 @@
 import re
 from tqdm import tqdm
 from typing import List, Tuple
-import math
+import math, json, os
 import numpy as np
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 from flashrag.utils import get_retriever, get_generator, selfask_pred_parse, ircot_pred_parse
@@ -13,15 +13,23 @@ from flashrag.generator import BaseGenerator
 
 
 class IterativePipeline(BasicPipeline):
-    def __init__(self, config, prompt_template=None, iter_num=3):
+    def __init__(self, config, prompt_template=None, iter_num: int=3, save_metrics: bool=False, metrics_log_dir: str="./profile_logs/IterativePipeline"):
         super().__init__(config, prompt_template)
-        self.iter_num = iter_num
+        self.iter_num: int = iter_num
         self.generator: BaseGenerator = get_generator(config)
         self.retriever: BaseRetriever = get_retriever(config)
+        # If flag is set, save metrics such as generation and retrieval times as well as prompts and predictions
+        self.save_metrics: bool = save_metrics
+        self.metric_logs_dir: str = metrics_log_dir
+        self.retrieval_logs_dir: str = os.path.join(self.metric_logs_dir, "retrieval")
+        self.generation_logs_dir: str = os.path.join(self.metric_logs_dir, "generation")
+        # below is where the prompts will be stored for each iteration
+        # Not to be confused as the directory where prompts are stored already
+        self.prompts_dir: str = os.path.join(self.metric_logs_dir, "prompts")
         
 
     def run(self, dataset, do_eval=True, pred_process_fun=None):
-        import json
+
         questions = dataset.question
         # run in batch
         past_generation_result = []  # list of N items
@@ -38,9 +46,7 @@ class IterativePipeline(BasicPipeline):
             retrieval_results, retrieval_times_per_batch = self.retriever.batch_search(input_query)
             dataset.update_output(f"retrieval_result_iter_{iter_idx}", retrieval_results)
 
-            # log retrieval_times_per_batch
 
-            open(f"profile_logs/retrieval_times_per_batch_iter_{iter_idx}.txt", "a").write(json.dumps(retrieval_times_per_batch))
 
             # retrieval-augmented generation
             # input_prompts = self.build_prompt(questions, retrieval_results)
@@ -52,27 +58,12 @@ class IterativePipeline(BasicPipeline):
             dataset.update_output(f"prompt_iter_{iter_idx}", input_prompts)
             past_generation_result = self.generator.generate(input_prompts, return_raw_output=True)
 
-            stored_output = []
-            for output in past_generation_result:
-                log_output = {
-                    'request_id' : output.request_id,
-                    'prediction' : output.outputs[0].text,
-                    'prompt' : output.prompt,
-                    'metrics' : {
-                        'arrival_time' : output.metrics.arrival_time,
-                        'last_token_time' : output.metrics.last_token_time,
-                        'first_scheduled_time' : output.metrics.first_scheduled_time,
-                        'first_token_time' : output.metrics.first_token_time,
-                        'time_in_queue' : output.metrics.time_in_queue,
-                        'finished_time' : output.metrics.finished_time,
-                        'scheduler_time' : output.metrics.scheduler_time,
-                    }
-                } 
-                stored_output.append(log_output)
-
-            # log past_generation_result
-            open(f"profile_logs/past_generation_result_iter_{iter_idx}.txt", "a").write(json.dumps(stored_output))
-
+            if self.save_metrics:
+                self.save_retrieval_metrics(retrieval_times_per_batch,\
+                    f"retrieval_times_per_batch_iter_{iter_idx}.txt")
+                self.save_generation_metrics(past_generation_result,\
+                    f"generation_times_per_batch_iter_{iter_idx}.txt")
+            
             past_generation_result = [output.outputs[0].text for output in past_generation_result]
             dataset.update_output(f"pred_iter_{iter_idx}", past_generation_result)
 
@@ -91,6 +82,48 @@ class IterativePipeline(BasicPipeline):
         dataset = self.evaluate(dataset, do_eval=do_eval, pred_process_fun=pred_process_fun)
 
         return dataset
+    
+    def save_prompts_and_predictions(self, data, file_name):
+        
+        open(os.path.join(self.prompts_dir, file_name)
+            , "a").write(json.dumps(data))
+
+
+    def save_retrieval_metrics(self, data, file_name):
+
+        open(os.path.join(self.retrieval_logs_dir, file_name)
+             , "a").write(json.dumps(data))
+    
+    def save_generation_metrics(self, data, file_name):
+        
+        stored_request_metrics = []
+        store_prompts_and_predictions = []
+        for output in data:
+            
+            store_prompts_and_predictions.append({
+                'request_id' : output.request_id,
+                'prediction' : output.outputs[0].text,
+                'prompt' : output.prompt,
+            })
+
+            stored_request_metrics.append({
+                'request_id' : output.request_id,
+                'metrics' : {
+                    'arrival_time' : output.metrics.arrival_time,
+                    'last_token_time' : output.metrics.last_token_time,
+                    'first_scheduled_time' : output.metrics.first_scheduled_time,
+                    'first_token_time' : output.metrics.first_token_time,
+                    'time_in_queue' : output.metrics.time_in_queue,
+                    'finished_time' : output.metrics.finished_time,
+                    'scheduler_time' : output.metrics.scheduler_time,
+                }
+            })
+        
+        self.save_prompts_and_predictions(store_prompts_and_predictions, file_name)
+
+        # log past_generation_result
+        open(os.path.join(self.generation_logs_dir, file_name)
+            , "a").write(json.dumps(stored_request_metrics))
 
 
 class SelfRAGPipeline(BasicPipeline):

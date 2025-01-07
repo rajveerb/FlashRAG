@@ -426,7 +426,7 @@ def iterretgen(args):
 
     from flashrag.pipeline import IterativePipeline
 
-    pipeline = IterativePipeline(config, iter_num=iter_num)
+    pipeline = IterativePipeline(config, iter_num=iter_num, args.save_metrics, args.metrics_log_dir)
     result = pipeline.run(test_data)
 
 
@@ -585,6 +585,8 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_name", type=str)
     parser.add_argument("--gpu_id", type=str)
     parser.add_argument("--config_path", type=str)
+    parser.add_argument("--save_metrics", type=bool, action='store_true')
+    parser.add_argument("--metrics_log_dir", type=str)
 
     
     func_dict = {

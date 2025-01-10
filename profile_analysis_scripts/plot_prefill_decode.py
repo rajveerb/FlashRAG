@@ -76,9 +76,9 @@ for log_file in log_files:
 for iter_num, metrics in metric_data.items():
     iter_data_dict = {'prefill_time (ms)': [], 'decode_time (s)': [], 'request_e2e_time (s)': []}
     for data in metrics:
-        prefill_time = (data['first_token_time'] - data['first_scheduled_time']) * 1000
+        prefill_time = (data['first_token_time'] - data['first_scheduled_time']) * 1000 # converts to millisecs (ms)
         decode_time = (data['last_token_time'] - data['first_token_time'])
-        request_e2e_time = (data['finished_time'] - data['arrival_time'])
+        request_e2e_time = (data['finished_time'] - data['first_scheduled_time'])
         iter_data_dict['prefill_time (ms)'].append(prefill_time)
         iter_data_dict['decode_time (s)'].append(decode_time)
         iter_data_dict['request_e2e_time (s)'].append(request_e2e_time)

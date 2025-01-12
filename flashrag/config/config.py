@@ -101,15 +101,21 @@ class Config:
 
     def _init_device(self):
         gpu_id = self.final_config["gpu_id"]
-        if gpu_id is not None:
+        #  CUDA_VISIBLE_DEVICES takes precedence over gpu_id
+        if os.environ.get("CUDA_VISIBLE_DEVICES") is not None:
+            gpu_num = len(os.environ["CUDA_VISIBLE_DEVICES"].split(","))
+        elif gpu_id is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-        try:
-            # import pynvml 
-            # pynvml.nvmlInit()
-            # gpu_num = pynvml.nvmlDeviceGetCount()
-            gpu_num = int(len(gpu_id.split(',')))
-        except:
-            gpu_num = 0
+            gpu_num = len(gpu_id.split(","))
+        else:
+            # last resort use all gpus
+            try:
+                import pynvml 
+                pynvml.nvmlInit()
+                gpu_num = pynvml.nvmlDeviceGetCount()
+            except:
+                # in case of no gpu
+                gpu_num = 0
         self.final_config['gpu_num'] = gpu_num
         if gpu_num > 0:
             self.final_config["device"] = "cuda"

@@ -29,7 +29,7 @@ method2index:
 data_dir: "examples/methods/dataset/"
 save_dir: "examples/methods/output/"
 
-gpu_id: "0,1,2,3"
+gpu_id: "0,1"
 dataset_name: "2wikidata" # name of the dataset in data_dir
 split: [ "dev" ]  # dataset split to load (e.g. train,dev,test)
 

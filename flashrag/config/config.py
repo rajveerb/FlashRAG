@@ -104,9 +104,10 @@ class Config:
         if gpu_id is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
         try:
-            import pynvml 
-            pynvml.nvmlInit()
-            gpu_num = pynvml.nvmlDeviceGetCount()
+            # import pynvml 
+            # pynvml.nvmlInit()
+            # gpu_num = pynvml.nvmlDeviceGetCount()
+            gpu_num = int(len(gpu_id.split(',')))
         except:
             gpu_num = 0
         self.final_config['gpu_num'] = gpu_num

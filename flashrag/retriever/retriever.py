@@ -350,19 +350,30 @@ class DenseRetriever(BaseRetriever):
         import time
 
         for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: ", disable=not display_progress_bar):
-            start_time = time.time()
             query_batch = query_list[start_idx : start_idx + batch_size]
+            start_embedding = time.time_ns()
             batch_emb = self.encoder.encode(query_batch)
+            end_embedding = time.time_ns()
             batch_scores, batch_idxs = self.index.search(batch_emb, k=num)
+            end_search = time.time_ns()
             batch_scores = batch_scores.tolist()
             batch_idxs = batch_idxs.tolist()
 
             flat_idxs = sum(batch_idxs, [])
             batch_results = load_docs(self.corpus, flat_idxs)
             batch_results = [batch_results[i * num : (i + 1) * num] for i in range(len(batch_idxs))]
-            duration = time.time() - start_time
+            end_docs_load = time.time_ns()
+            embedding_timing = (start_embedding, end_embedding-start_embedding)
+            search_timing = (end_embedding, end_search-end_embedding)
+            docs_load_timing = (end_search, end_docs_load-end_search)
+            duration = (start_embedding, end_docs_load-start_embedding)
 
-            time_per_batch_list.append({start_idx : (start_time, duration)})
+            time_per_batch_list.append({start_idx : {
+               'embedding': embedding_timing,
+                'search': search_timing,
+                'docs_load': docs_load_timing,
+                'duration': duration
+            }})
 
             scores.extend(batch_scores)
             results.extend(batch_results)

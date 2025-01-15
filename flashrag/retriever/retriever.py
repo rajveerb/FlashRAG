@@ -20,7 +20,7 @@ def cache_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query_list, num=None, return_score=False, time_per_batch=True):
+    def wrapper(self, query_list, num=None, return_score=False, time_per_batch=True, display_progress_bar=False):
         if num is None:
             num = self.topk
         if self.use_cache:
@@ -97,7 +97,7 @@ def rerank_manager(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, query_list, num=None, return_score=False, time_per_batch=True):
+    def wrapper(self, query_list, num=None, return_score=False, time_per_batch=True, display_progress_bar=False):
         results, scores, time_per_batch_list = func(self, query_list, num, True)
         if self.use_reranker:
             results, scores = self.reranker.rerank(query_list, results)
@@ -336,7 +336,7 @@ class DenseRetriever(BaseRetriever):
         else:
             return results
 
-    def _batch_search(self, query_list: List[str], num: int = None, return_score=False, time_per_batch=True):
+    def _batch_search(self, query_list: List[str], num: int = None, return_score=False, time_per_batch=True, display_progress_bar=False):
         if isinstance(query_list, str):
             query_list = [query_list]
         if num is None:
@@ -349,7 +349,7 @@ class DenseRetriever(BaseRetriever):
         time_per_batch_list = []
         import time
 
-        for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: "):
+        for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: ", disable=display_progress_bar):
             start_time = time.time()
             query_batch = query_list[start_idx : start_idx + batch_size]
             batch_emb = self.encoder.encode(query_batch)

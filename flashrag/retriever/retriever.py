@@ -349,7 +349,7 @@ class DenseRetriever(BaseRetriever):
         time_per_batch_list = []
         import time
 
-        for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: ", disable=display_progress_bar):
+        for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: ", disable=not display_progress_bar):
             start_time = time.time()
             query_batch = query_list[start_idx : start_idx + batch_size]
             batch_emb = self.encoder.encode(query_batch)

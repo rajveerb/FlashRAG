@@ -10,7 +10,7 @@ from flashrag.dataset import get_batch_dataset, merge_batch_dataset
 from flashrag.prompt import PromptTemplate
 from flashrag.retriever import BaseRetriever
 from flashrag.generator import BaseGenerator
-
+import time
 
 class IterativePipeline(BasicPipeline):
     def __init__(self, config, prompt_template=None, iter_num: int=3, save_metrics: bool=False, metrics_log_dir: str="./profile_logs/IterativePipeline"):
@@ -43,7 +43,7 @@ class IterativePipeline(BasicPipeline):
             # input_query = input_query[:2]  # limit to 10 for now
 
             # generation-augmented retrieval
-            retrieval_results, retrieval_times_per_batch = self.retriever.batch_search(input_query)
+            retrieval_results, retrieval_times = self.retriever.batch_search(input_query)
             dataset.update_output(f"retrieval_result_iter_{iter_idx}", retrieval_results)
 
 
@@ -59,7 +59,7 @@ class IterativePipeline(BasicPipeline):
             past_generation_result = self.generator.generate(input_prompts, return_raw_output=True)
 
             if self.save_metrics:
-                self.save_retrieval_metrics(retrieval_times_per_batch,\
+                self.save_retrieval_metrics(retrieval_times,\
                     f"retrieval_times_per_batch_iter_{iter_idx}.txt")
                 self.save_generation_metrics(past_generation_result,\
                     f"generation_times_per_batch_iter_{iter_idx}.txt")
@@ -124,6 +124,112 @@ class IterativePipeline(BasicPipeline):
         # log past_generation_result
         open(os.path.join(self.generation_logs_dir, file_name)
             , "a").write(json.dumps(stored_request_metrics))
+
+
+class ProfileIterativePipeline(BasicPipeline):
+    def __init__(self, config, prompt_template=None, iter_num: int=3, save_metrics: bool=False, metrics_log_dir: str="./profile_logs/IterativePipeline", batch_size: int=1):
+        super().__init__(config, prompt_template)
+        self.iter_num: int = iter_num
+        self.generator: BaseGenerator = get_generator(config)
+        self.retriever: BaseRetriever = get_retriever(config)
+        # If flag is set, save metrics such as generation and retrieval times as well as prompts and predictions
+        self.save_metrics: bool = save_metrics
+        self.metric_logs_dir: str = metrics_log_dir
+        self.retrieval_logs_dir: str = os.path.join(self.metric_logs_dir, "retrieval")
+        self.generation_logs_dir: str = os.path.join(self.metric_logs_dir, "generation")
+        # below is where the prompts will be stored for each iteration
+        # Not to be confused as the directory where prompts are stored already
+        self.prompts_dir: str = os.path.join(self.metric_logs_dir, "prompts")
+        # make dir if not exists
+        os.makedirs(self.retrieval_logs_dir, exist_ok=True)
+        os.makedirs(self.generation_logs_dir, exist_ok=True)
+        os.makedirs(self.prompts_dir, exist_ok=True)
+        self.batch_size: int = batch_size
+        
+        
+
+    def run(self, dataset, do_eval=True, pred_process_fun=None):
+
+        questions = dataset.question
+        
+        past_generation_result = []  # list of N items
+        # run in batch
+        for iter_idx in range(self.iter_num):
+            if iter_idx == 0:
+                input_query = questions
+            else:
+                assert len(questions) == len(past_generation_result)
+                input_query = [f"{q} {r}" for q, r in zip(questions, past_generation_result)]
+            # to store results for iter_idx
+            retrieval_results = []
+            input_prompts = []
+            past_generation_results = {}
+            past_generation_texts = []
+            retrieval_data = {}
+
+            # perform pipeline at per batch level 
+            for i in tqdm(range(0, len(input_query), self.batch_size)):
+                # break into batch
+                prompts_per_batch = input_query[i:i+self.batch_size]
+                questions_per_batch = questions[i:i+self.batch_size]
+                                
+                # generation-augmented retrieval
+                retrieval_results_per_batch, retrieval_times_per_batch = self.retriever.batch_search(prompts_per_batch)
+
+                # retrieval-augmented generation
+                input_prompts_per_batch: List[str] = [
+                    self.prompt_template.get_string(question=q, retrieval_result=r)
+                    for q, r in zip(questions_per_batch, retrieval_results_per_batch)
+                ]
+
+                start_generation = time.time_ns()
+                past_generation_result_per_batch = self.generator.generate(input_prompts_per_batch, return_raw_output=True)
+                generation_duration = time.time_ns() - start_generation
+                past_generation_text_per_batch: List[str] = [output.outputs[0].text for output in past_generation_result_per_batch]
+
+                batch_idx = i//self.batch_size
+                retrieval_results += retrieval_results_per_batch
+                input_prompts += input_prompts_per_batch
+                past_generation_texts += past_generation_text_per_batch
+                retrieval_data[batch_idx] = {
+                    "batch_timing" : retrieval_times_per_batch,
+                    "batch_results" : input_prompts_per_batch
+                }
+                past_generation_results[batch_idx] = {
+                    "batch_timing" : (start_generation, generation_duration),
+                    "batch_results" : past_generation_result_per_batch # this includes individual requests' timing data
+                    }
+
+                break
+                
+            if self.save_metrics:
+                self.save_retrieval_metrics(retrieval_data,\
+                    f"retrieval_times_per_batch_iter_{iter_idx}.txt")
+                self.save_generation_metrics(past_generation_results,\
+                    f"generation_times_per_batch_iter_{iter_idx}.txt")
+
+            dataset.update_output(f"retrieval_result_iter_{iter_idx}", retrieval_results)
+            dataset.update_output(f"prompt_iter_{iter_idx}", input_prompts)
+            dataset.update_output(f"pred_iter_{iter_idx}", past_generation_texts)
+            
+        # use last retrieval result for evaluation
+        dataset.update_output("retrieval_result", retrieval_results)
+        dataset.update_output("pred", past_generation_texts)
+        dataset = self.evaluate(dataset, do_eval=do_eval, pred_process_fun=pred_process_fun)
+
+        return dataset
+
+    def save_retrieval_metrics(self, data, file_name):
+
+        open(os.path.join(self.retrieval_logs_dir, file_name)
+             , "a").write(json.dumps(data))
+    
+    def save_generation_metrics(self, data, file_name):
+        
+        # log past_generation_result
+        open(os.path.join(self.generation_logs_dir, file_name)
+            , "a").write(json.dumps(data))
+
 
 
 class SelfRAGPipeline(BasicPipeline):

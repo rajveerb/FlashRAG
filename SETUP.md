@@ -45,4 +45,13 @@ python scripts/get_no_vectors.py \
     --save_metrics \
     --metrics_log_dir ./profile_logs/IterativePipeline \ 
     --config_path ./examples/methods/my_config.yaml
+    
+ python examples/methods/run_exp.py --method_name 'iterretgen' \
+    --split 'dev' \
+    --dataset_name '2wikidata' \
+    --gpu_id '0,1' \
+    --save_metrics \
+    --metrics_log_dir ./profile_logs/ProfileIterativePipeline \ 
+    -- profile
+    --config_path ./examples/methods/my_config.yaml
 ```

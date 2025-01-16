@@ -424,9 +424,11 @@ def iterretgen(args):
     all_split = get_dataset(config)
     test_data = all_split[args.split]
 
-    from flashrag.pipeline import IterativePipeline
-
-    pipeline = IterativePipeline(config, iter_num=iter_num, args.save_metrics, args.metrics_log_dir)
+    from flashrag.pipeline import IterativePipeline,ProfileIterativePipeline
+    if args.profile:
+        pipeline = ProfileIterativePipeline(config, iter_num=iter_num, save_metrics = args.save_metrics, metrics_log_dir = args.metrics_log_dir)
+    else:        
+        pipeline = IterativePipeline(config, iter_num=iter_num, save_metrics = args.save_metrics, metrics_log_dir = args.metrics_log_dir)
     result = pipeline.run(test_data)
 
 
@@ -587,6 +589,7 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", type=str)
     parser.add_argument("--save_metrics", type=bool, action='store_true')
     parser.add_argument("--metrics_log_dir", type=str)
+    parser.add_argument("--profile", type=bool, action='store_true', default=False)
 
     
     func_dict = {

@@ -1,5 +1,6 @@
 import json
 import os
+import dataclasses
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import warnings
@@ -115,7 +116,14 @@ def rerank_manager(func):
 
     return wrapper
 
-
+@dataclasses.dataclass
+class RetrieverTiming:
+    embedding: tuple
+    search: tuple
+    docs_load: tuple
+    duration: tuple
+    
+    
 class BaseRetriever:
     """Base object for all retrievers."""
 
@@ -346,7 +354,7 @@ class DenseRetriever(BaseRetriever):
 
         results = []
         scores = []
-        time_per_batch_list = []
+        time_per_batch_list: List[Dict[int, RetrieverTiming]] = []
         import time
 
         for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: ", disable=not display_progress_bar):
@@ -368,12 +376,14 @@ class DenseRetriever(BaseRetriever):
             docs_load_timing = (end_search, end_docs_load-end_search)
             duration = (start_embedding, end_docs_load-start_embedding)
 
-            time_per_batch_list.append({start_idx : {
-               'embedding': embedding_timing,
-                'search': search_timing,
-                'docs_load': docs_load_timing,
-                'duration': duration
-            }})
+            time_per_batch_list.append({
+                start_idx: RetrieverTiming(
+                    embedding=embedding_timing,
+                    search=search_timing,
+                    docs_load=docs_load_timing,
+                    duration=duration
+                )
+            })
 
             scores.extend(batch_scores)
             results.extend(batch_results)

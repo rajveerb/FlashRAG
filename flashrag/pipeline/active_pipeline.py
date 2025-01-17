@@ -11,6 +11,7 @@ from flashrag.prompt import PromptTemplate
 from flashrag.retriever import BaseRetriever
 from flashrag.generator import BaseGenerator
 import time
+from flashrag.config import Config
 
 class IterativePipeline(BasicPipeline):
     def __init__(self, config, prompt_template=None, iter_num: int=3, save_metrics: bool=False, metrics_log_dir: str="./profile_logs/IterativePipeline"):
@@ -127,24 +128,28 @@ class IterativePipeline(BasicPipeline):
 
 
 class ProfileIterativePipeline(BasicPipeline):
-    def __init__(self, config, prompt_template=None, iter_num: int=3, save_metrics: bool=False, metrics_log_dir: str="./profile_logs/IterativePipeline", batch_size: int=1):
+    def __init__(self, config: Config, prompt_template=None, iter_num: int=3, save_metrics: bool=False, metrics_log_dir: str="./profile_logs/IterativePipeline", batch_size: int=1):
         super().__init__(config, prompt_template)
         self.iter_num: int = iter_num
+        if "override_batch_size" in config:
+            self.batch_size: int = config["override_batch_size"]
+        else:
+            self.batch_size: int = batch_size
+
         self.generator: BaseGenerator = get_generator(config)
         self.retriever: BaseRetriever = get_retriever(config)
         # If flag is set, save metrics such as generation and retrieval times as well as prompts and predictions
         self.save_metrics: bool = save_metrics
         self.metric_logs_dir: str = metrics_log_dir
-        self.retrieval_logs_dir: str = os.path.join(self.metric_logs_dir, "retrieval")
-        self.generation_logs_dir: str = os.path.join(self.metric_logs_dir, "generation")
+        self.retrieval_logs_dir: str = os.path.join(self.metric_logs_dir, f"batch_size_{self.batch_size}", "retrieval")
+        self.generation_logs_dir: str = os.path.join(self.metric_logs_dir, f"batch_size_{self.batch_size}", "generation")
         # below is where the prompts will be stored for each iteration
         # Not to be confused as the directory where prompts are stored already
-        self.prompts_dir: str = os.path.join(self.metric_logs_dir, "prompts")
+        self.prompts_dir: str = os.path.join(self.metric_logs_dir, f"batch_size_{self.batch_size}", "prompts")
         # make dir if not exists
         os.makedirs(self.retrieval_logs_dir, exist_ok=True)
         os.makedirs(self.generation_logs_dir, exist_ok=True)
         os.makedirs(self.prompts_dir, exist_ok=True)
-        self.batch_size: int = batch_size
         
         
 
@@ -152,29 +157,30 @@ class ProfileIterativePipeline(BasicPipeline):
 
         questions = dataset.question
         
-        past_generation_result = []  # list of N items
+        past_generation_texts = []  # list of N items
         # run in batch
         for iter_idx in range(self.iter_num):
             if iter_idx == 0:
                 input_query = questions
             else:
-                assert len(questions) == len(past_generation_result)
-                input_query = [f"{q} {r}" for q, r in zip(questions, past_generation_result)]
+                assert len(questions) == len(past_generation_texts)
+                input_query = [f"{q} {r}" for q, r in zip(questions, past_generation_texts)]
             # to store results for iter_idx
             retrieval_results = []
-            input_prompts = []
+            retrieval_queries = []
             past_generation_results = {}
             past_generation_texts = []
+            input_prompts = []
             retrieval_data = {}
 
             # perform pipeline at per batch level 
             for i in tqdm(range(0, len(input_query), self.batch_size)):
                 # break into batch
-                prompts_per_batch = input_query[i:i+self.batch_size]
+                retrieval_queries_per_batch = input_query[i:i+self.batch_size]
                 questions_per_batch = questions[i:i+self.batch_size]
                                 
                 # generation-augmented retrieval
-                retrieval_results_per_batch, retrieval_times_per_batch = self.retriever.batch_search(prompts_per_batch)
+                retrieval_results_per_batch, retrieval_times_per_batch = self.retriever.batch_search(retrieval_queries_per_batch)
 
                 # retrieval-augmented generation
                 input_prompts_per_batch: List[str] = [
@@ -189,18 +195,17 @@ class ProfileIterativePipeline(BasicPipeline):
 
                 batch_idx = i//self.batch_size
                 retrieval_results += retrieval_results_per_batch
+                retrieval_queries += retrieval_queries_per_batch
                 input_prompts += input_prompts_per_batch
                 past_generation_texts += past_generation_text_per_batch
                 retrieval_data[batch_idx] = {
                     "batch_timing" : retrieval_times_per_batch,
-                    "batch_results" : input_prompts_per_batch
+                    "batch_results" : retrieval_queries_per_batch
                 }
                 past_generation_results[batch_idx] = {
                     "batch_timing" : (start_generation, generation_duration),
                     "batch_results" : past_generation_result_per_batch # this includes individual requests' timing data
-                    }
-
-                break
+                }
                 
             if self.save_metrics:
                 self.save_retrieval_metrics(retrieval_data,\
@@ -219,16 +224,50 @@ class ProfileIterativePipeline(BasicPipeline):
 
         return dataset
 
-    def save_retrieval_metrics(self, data, file_name):
-
-        open(os.path.join(self.retrieval_logs_dir, file_name)
-             , "a").write(json.dumps(data))
+    def save_prompts_and_predictions(self, data, file_name):
+        open(os.path.join(self.prompts_dir, file_name)
+            , "a").write(json.dumps(data))
     
     def save_generation_metrics(self, data, file_name):
+        stored_request_metrics = {}
+        store_prompts_and_predictions = {}
+        for batch_idx in data.keys():
+            batch_data = data[batch_idx]
+            
+            store_prompts_and_predictions[batch_idx] = [
+                {
+                    'request_id' : output.request_id,
+                    'prediction' : output.outputs[0].text,
+                    'prompt' : output.prompt
+                }
+                for output in batch_data['batch_results']
+            ]
+
+            stored_request_metrics[batch_idx] = [
+                {
+                    'request_id' : output.request_id,
+                    'metrics' : {
+                        'arrival_time' : output.metrics.arrival_time,
+                        'last_token_time' : output.metrics.last_token_time,
+                        'first_scheduled_time' : output.metrics.first_scheduled_time,
+                        'first_token_time' : output.metrics.first_token_time,
+                        'time_in_queue' : output.metrics.time_in_queue,
+                        'finished_time' : output.metrics.finished_time,
+                        'scheduler_time' : output.metrics.scheduler_time,
+                    }
+                }
+                for output in batch_data['batch_results']
+            ]
+        
+        self.save_prompts_and_predictions(store_prompts_and_predictions, file_name)
         
         # log past_generation_result
         open(os.path.join(self.generation_logs_dir, file_name)
-            , "a").write(json.dumps(data))
+            , "a").write(json.dumps(stored_request_metrics))
+
+    def save_retrieval_metrics(self, data, file_name):
+        open(os.path.join(self.retrieval_logs_dir, file_name)
+             , "a").write(json.dumps(data))
 
 
 

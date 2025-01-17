@@ -118,11 +118,17 @@ def rerank_manager(func):
 
 @dataclasses.dataclass
 class RetrieverTiming:
-    embedding: tuple
-    search: tuple
-    docs_load: tuple
-    duration: tuple
-    
+    embedding_time: tuple
+    vector_search_time: tuple
+    load_docs_time: tuple
+    overall_time: tuple
+
+    def to_dict(self):
+        # Convert the dataclass to a dictionary, converting tuples to lists
+        return {
+            field.name: list(getattr(self, field.name)) if isinstance(getattr(self, field.name), tuple) else getattr(self, field.name)
+            for field in dataclasses.fields(self)
+        }
     
 class BaseRetriever:
     """Base object for all retrievers."""
@@ -307,7 +313,10 @@ class DenseRetriever(BaseRetriever):
 
         self.corpus = load_corpus(self.corpus_path)
         self.topk = config["retrieval_topk"]
-        self.batch_size = config["retrieval_batch_size"]
+        if "override_batch_size" in config:
+            self.batch_size = config["override_batch_size"]
+        else:
+            self.batch_size = config["retrieval_batch_size"]
         self.instruction = config["instruction"]
 
         if config["use_sentence_transformer"]:
@@ -354,7 +363,7 @@ class DenseRetriever(BaseRetriever):
 
         results = []
         scores = []
-        time_per_batch_list: List[Dict[int, RetrieverTiming]] = []
+        time_per_batch_list: Dict[int, RetrieverTiming] = {}
         import time
 
         for start_idx in tqdm(range(0, len(query_list), batch_size), desc="Retrieval process: ", disable=not display_progress_bar):
@@ -371,19 +380,17 @@ class DenseRetriever(BaseRetriever):
             batch_results = load_docs(self.corpus, flat_idxs)
             batch_results = [batch_results[i * num : (i + 1) * num] for i in range(len(batch_idxs))]
             end_docs_load = time.time_ns()
-            embedding_timing = (start_embedding, end_embedding-start_embedding)
-            search_timing = (end_embedding, end_search-end_embedding)
-            docs_load_timing = (end_search, end_docs_load-end_search)
-            duration = (start_embedding, end_docs_load-start_embedding)
+            embedding_time = (start_embedding, end_embedding-start_embedding)
+            vector_search_time = (end_embedding, end_search-end_embedding)
+            load_docs_time = (end_search, end_docs_load-end_search)
+            overall_time = (start_embedding, end_docs_load-start_embedding)
 
-            time_per_batch_list.append({
-                start_idx: RetrieverTiming(
-                    embedding=embedding_timing,
-                    search=search_timing,
-                    docs_load=docs_load_timing,
-                    duration=duration
-                )
-            })
+            time_per_batch_list[start_idx//batch_size] = RetrieverTiming(
+                    embedding_time=embedding_time,
+                    vector_search_time=vector_search_time,
+                    load_docs_time=load_docs_time,
+                    overall_time=overall_time
+                ).to_dict()
 
             scores.extend(batch_scores)
             results.extend(batch_results)

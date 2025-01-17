@@ -419,12 +419,17 @@ def iterretgen(args):
         "gpu_id": args.gpu_id,
         "dataset_name": args.dataset_name,
     }
+
+    # check if override_batch_size is in the args
+    if args.override_batch_size:
+        config_dict["override_batch_size"] = args.override_batch_size
+
     # preparation
     config = Config(args.config_path, config_dict)
     all_split = get_dataset(config)
     test_data = all_split[args.split]
 
-    from flashrag.pipeline import IterativePipeline,ProfileIterativePipeline
+    from flashrag.pipeline import IterativePipeline, ProfileIterativePipeline
     if args.profile:
         pipeline = ProfileIterativePipeline(config, iter_num=iter_num, save_metrics = args.save_metrics, metrics_log_dir = args.metrics_log_dir)
     else:        
@@ -587,9 +592,10 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_name", type=str)
     parser.add_argument("--gpu_id", type=str)
     parser.add_argument("--config_path", type=str)
-    parser.add_argument("--save_metrics", type=bool, action='store_true')
+    parser.add_argument("--save_metrics", action='store_true', default=False)
     parser.add_argument("--metrics_log_dir", type=str)
-    parser.add_argument("--profile", type=bool, action='store_true', default=False)
+    parser.add_argument("--profile", action='store_true', default=False)
+    parser.add_argument("--override_batch_size", type=int, default=None, help="Override the batch size in the config file. Note: this value will be used for both retrieval and generation.")
 
     
     func_dict = {

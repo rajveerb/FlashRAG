@@ -51,7 +51,8 @@ python scripts/get_no_vectors.py \
     --dataset_name '2wikidata' \
     --gpu_id '0,1' \
     --save_metrics \
-    --metrics_log_dir ./profile_logs/ProfileIterativePipeline \ 
-    -- profile
+    --metrics_log_dir ./profile_logs/ProfileIterativePipeline \
+    --profile \
+    --override_batch_size 3 \
     --config_path ./examples/methods/my_config.yaml
 ```

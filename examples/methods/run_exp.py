@@ -413,7 +413,7 @@ def iterretgen(args):
         Zhangyin Feng et al. "Retrieval-Generation Synergy Augmented Large Language Models"
         in EMNLP Findings 2023.
     """
-    iter_num = 3
+    iter_num = args.iter_num
     config_dict = {
         "save_note": "iter-retgen",
         "gpu_id": args.gpu_id,
@@ -596,7 +596,7 @@ if __name__ == "__main__":
     parser.add_argument("--metrics_log_dir", type=str)
     parser.add_argument("--profile", action='store_true', default=False)
     parser.add_argument("--override_batch_size", type=int, default=None, help="Override the batch size in the config file. Note: this value will be used for both retrieval and generation.")
-
+    parser.add_argument("--iter_num", type=int, default=3, help="Number of iterations for iterretgen.")
     
     func_dict = {
         "AAR-contriever": aar,

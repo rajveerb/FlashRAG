@@ -54,5 +54,6 @@ python scripts/get_no_vectors.py \
     --metrics_log_dir ./profile_logs/ProfileIterativePipeline \
     --profile \
     --override_batch_size 3 \
+    --iter_num 1 \
     --config_path ./examples/methods/my_config.yaml
 ```

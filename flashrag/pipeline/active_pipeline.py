@@ -209,9 +209,9 @@ class ProfileIterativePipeline(BasicPipeline):
                 
             if self.save_metrics:
                 self.save_retrieval_metrics(retrieval_data,\
-                    f"retrieval_times_per_batch_iter_{iter_idx}.txt")
+                    f"retrieval_times_per_batch_iter_{iter_idx}.json")
                 self.save_generation_metrics(past_generation_results,\
-                    f"generation_times_per_batch_iter_{iter_idx}.txt")
+                    f"generation_times_per_batch_iter_{iter_idx}.json")
 
             dataset.update_output(f"retrieval_result_iter_{iter_idx}", retrieval_results)
             dataset.update_output(f"prompt_iter_{iter_idx}", input_prompts)
@@ -243,7 +243,9 @@ class ProfileIterativePipeline(BasicPipeline):
                 for output in batch_data['batch_results']
             ]
 
-            stored_request_metrics[batch_idx] = [
+            stored_request_metrics[batch_idx] = {
+                "batch_timing" : batch_data['batch_timing'],
+                "requests_stats": [
                 {
                     'request_id' : output.request_id,
                     'metrics' : {
@@ -256,8 +258,8 @@ class ProfileIterativePipeline(BasicPipeline):
                         'scheduler_time' : output.metrics.scheduler_time,
                     }
                 }
-                for output in batch_data['batch_results']
-            ]
+                for output in batch_data['batch_results']]
+            }
         
         self.save_prompts_and_predictions(store_prompts_and_predictions, file_name)
         
